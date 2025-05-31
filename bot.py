@@ -12,10 +12,10 @@ import requests
 import json
 import pytz
 
-TOKEN = "7863847566:AAHmlJ2rO-OEm-ucHj8cgZ7mDK2SGVSnxlo"
-WEATHER_API_KEY = "85ea57a7fb52f914ea465eb629e649e0"  # Нужно будет заменить на реальный ключ
+TOKEN = "ТОКЕН"
+WEATHER_API_KEY = "ТОКЕН"  # Нужно будет заменить на реальный ключ
 CITY_NAME = "Moscow"  # Город по умолчанию
-ADMINS = [648554931]
+ADMINS = [АЙДИ]
 DEFAULT_NOTIFICATION_TIME = 20  # Время рассылки по умолчанию (20:00)
 
 # Состояния для ConversationHandler
