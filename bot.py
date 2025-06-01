@@ -18,7 +18,6 @@ CITY_NAME = "Moscow"  # Город по умолчанию
 ADMINS = [АЙДИ]
 DEFAULT_NOTIFICATION_TIME = 20  # Время рассылки по умолчанию (20:00)
 
-# Состояния для ConversationHandler
 WAITING_FOR_NOTE = 1
 WAITING_FOR_FILE = 2
 WAITING_FOR_SEARCH = 3
@@ -27,13 +26,13 @@ WAITING_FOR_TIME = 5
 
 user_groups = {}
 subscribed_users = set()
-user_notification_times = {}  # Хранение пользовательских настроек времени рассылки
+user_notification_times = {}
 schedule_data = []
 available_groups = []
 current_day_selections = {}
 current_week_offsets = {}
-user_notes = {}  # Структура: {user_id: {date_str: note}}
-user_calendar_date = {}  # Для хранения выбранной даты в календаре
+user_notes = {}
+user_calendar_date = {}
 
 
 def load_schedule():
@@ -50,7 +49,6 @@ def load_schedule():
 
     for row in ws.iter_rows(min_row=2, values_only=True):
         group = row[0]
-        # Пропускаем строки с пустым значением группы
         if not group:
             continue
 
@@ -82,15 +80,12 @@ def load_schedule():
 
 
 def get_current_week(date):
-    # Начальная дата (26 мая 2024) - первая неделя
     start_date = datetime.datetime(2024, 5, 26)
     delta = date - start_date
     if delta.days < 0:
-        # Для дат до начальной даты считаем от предыдущей недели
         delta_weeks = abs(delta.days) // 7 + 1
         return 1 if delta_weeks % 2 == 0 else 2
     else:
-        # Для дат после начальной даты
         delta_weeks = delta.days // 7
         return 1 if delta_weeks % 2 == 0 else 2
 
@@ -160,7 +155,6 @@ def get_pair_number(time_str):
 def create_calendar_keyboard(year: int, month: int):
     keyboard = []
 
-    # Заголовок с месяцем и годом
     month_names = [
         "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
         "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"
@@ -170,14 +164,11 @@ def create_calendar_keyboard(year: int, month: int):
         callback_data="ignore"
     )])
 
-    # Дни недели
     days_of_week = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
     keyboard.append([InlineKeyboardButton(day, callback_data="ignore") for day in days_of_week])
 
-    # Получаем календарь на месяц
     cal = calendar.monthcalendar(year, month)
 
-    # Добавляем дни
     for week in cal:
         row = []
         for day in week:
@@ -190,7 +181,6 @@ def create_calendar_keyboard(year: int, month: int):
                 ))
         keyboard.append(row)
 
-    # Добавляем кнопки навигации
     nav_row = []
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
@@ -241,7 +231,7 @@ def create_main_menu_keyboard(user_id):
         [InlineKeyboardButton("🗂 Мои заметки", callback_data="notes_menu")],
         [InlineKeyboardButton("❓ Помощник", callback_data="ai_assistant")],
         [InlineKeyboardButton(subscription_text, callback_data="toggle_subscription")],
-        [InlineKeyboardButton(f"⏰ Время рассылки: {notification_time:02d}:00", callback_data="set_time")],
+        [InlineKeyboardButton(f"⏰ Время рассылки: {notification_time['hour']:02d}:{notification_time['minute']:02d}", callback_data="set_time")],
         [InlineKeyboardButton("👥 Сменить группу", callback_data="change_group")]
     ])
 
@@ -260,7 +250,6 @@ def create_notes_menu_keyboard():
 
 
 def get_course_from_group(group: str) -> int:
-    # Находим первую цифру в названии группы
     for char in group:
         if char.isdigit():
             return int(char)
@@ -271,12 +260,11 @@ def create_course_keyboard():
     if not available_groups:
         return None
 
-    # Получаем все доступные курсы
     courses = sorted(set(get_course_from_group(group) for group in available_groups))
 
     keyboard = []
     for course in courses:
-        if course > 0:  # Пропускаем некорректные значения
+        if course > 0:
             keyboard.append([InlineKeyboardButton(f"{course} курс", callback_data=f"course_{course}")])
 
     if len(keyboard) == 0:
@@ -286,7 +274,6 @@ def create_course_keyboard():
 
 
 def create_direction_keyboard_for_course(course: int):
-    # Получаем направления только для выбранного курса
     directions = set()
     for group in available_groups:
         if get_course_from_group(group) == course:
@@ -301,7 +288,6 @@ def create_direction_keyboard_for_course(course: int):
 
 
 def create_groups_keyboard_for_direction(direction: str, course: int):
-    # Получаем группы только для выбранного направления и курса
     groups = sorted([
         group for group in available_groups
         if group.startswith(direction) and get_course_from_group(group) == course
@@ -316,7 +302,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     current_week_offsets[user_id] = 0
 
-    # Загружаем расписание, если оно еще не загружено
     if not available_groups:
         if user_id in ADMINS:
             await update.message.reply_text(
@@ -329,7 +314,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # Показываем выбор курса
     keyboard = create_course_keyboard()
     if keyboard:
         await update.message.reply_text(
@@ -383,13 +367,11 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text.strip()
 
-    # Проверяем, похож ли текст на запрос к AI
     if ("когда" in text.lower() and "следующ" in text.lower()) or \
             ("сколько" in text.lower() and "пар" in text.lower() and "недел" in text.lower()):
         await handle_ai_request(update, context)
         return
 
-    # Проверяем, ожидаем ли мы дату для удаления заметки
     if context.user_data.get('waiting_for_delete'):
         del context.user_data['waiting_for_delete']
         try:
@@ -411,7 +393,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    # Проверяем, ожидаем ли мы поисковый запрос
     if context.user_data.get('waiting_for_search'):
         search_type = context.user_data.get('search_type')
         del context.user_data['waiting_for_search']
@@ -436,7 +417,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Остальной код обработки текста...
     if user_id in user_calendar_date:
         selected_date = user_calendar_date[user_id]
         save_note(user_id, selected_date, text)
@@ -448,7 +428,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Обработка группы
     group = text.upper()
     if group not in available_groups:
         await update.message.reply_text(
@@ -690,7 +669,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             subscribed_users.add(user_id)
             await query.answer("Вы включили рассылку.")
-        # Обновляем главное меню с новым статусом рассылки
         await query.edit_message_text(
             "Выберите действие:",
             reply_markup=create_main_menu_keyboard(user_id)
@@ -786,15 +764,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data.startswith("time_"):
         hour = int(query.data.split("_")[1])
         user_id = query.from_user.id
-        user_notification_times[user_id] = hour
+        user_notification_times[user_id] = {"hour": hour, "minute": 0}
 
-        # Обновляем расписание в планировщике для этого пользователя
         scheduler = context.job_queue
         user_jobs = scheduler.get_jobs_by_name(f"daily_notification_{user_id}")
         for job in user_jobs:
             job.schedule_removal()
 
-        # Создаем новое расписание для пользователя
         scheduler.run_daily(
             send_daily_schedule,
             time=datetime.time(hour=hour, minute=0),
@@ -826,13 +802,11 @@ async def show_schedule_with_day_selector(update, context, user_id, group, date=
 
 def get_weather_forecast(city=CITY_NAME):
     try:
-        # Получаем прогноз на день
         url = f"http://api.openweathermap.org/data/2.5/forecast?q={city}&appid={WEATHER_API_KEY}&units=metric&lang=ru"
         response = requests.get(url)
         data = response.json()
 
         if response.status_code == 200:
-            # Получаем прогноз на следующий день
             tomorrow_forecasts = []
             tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
             tomorrow_date = tomorrow.strftime('%Y-%m-%d')
@@ -841,7 +815,7 @@ def get_weather_forecast(city=CITY_NAME):
                 forecast_time = datetime.datetime.fromtimestamp(item['dt'])
                 if forecast_time.strftime('%Y-%m-%d') == tomorrow_date:
                     hour = forecast_time.hour
-                    if hour in [12, 18]:  # Берем прогноз на день (12:00) и вечер (18:00)
+                    if hour in [12, 18]:
                         tomorrow_forecasts.append({
                             'temp': item['main']['temp'],
                             'description': item['weather'][0]['description'],
@@ -917,7 +891,6 @@ async def send_daily_schedule(context: ContextTypes.DEFAULT_TYPE, user_ids=None)
     tomorrow = datetime.datetime.now() + datetime.timedelta(days=1)
     weather = get_weather_forecast()
 
-    # Если user_ids не указан, отправляем всем подписанным пользователям
     target_users = user_ids if user_ids else subscribed_users
 
     for user_id in target_users:
@@ -975,18 +948,14 @@ def search_notes(user_id: int, query: str = None, date_str: str = None) -> str:
 
     found_notes = []
 
-    # Если нет параметров поиска, показываем все заметки
     if not query and not date_str:
         found_notes = [(date, text) for date, text in user_notes[user_id].items()]
     else:
-        # Поиск по конкретным параметрам
         for note_date, note_text in user_notes[user_id].items():
-            # Поиск по дате
             if date_str and date_str in note_date:
                 found_notes.append((note_date, note_text))
                 continue
 
-            # Поиск по тексту
             if query and query.lower() in note_text.lower():
                 found_notes.append((note_date, note_text))
 
@@ -997,7 +966,6 @@ def search_notes(user_id: int, query: str = None, date_str: str = None) -> str:
         else:
             return "У вас пока нет сохраненных заметок. Чтобы добавить заметку, вернитесь в главное меню и нажмите '📝 Добавить заметку'"
 
-    # Сортируем заметки по дате (сначала новые)
     found_notes.sort(key=lambda x: x[0], reverse=True)
 
     if not query and not date_str:
@@ -1006,15 +974,12 @@ def search_notes(user_id: int, query: str = None, date_str: str = None) -> str:
         search_term = f"дате {date_str}" if date_str else f"запросу '{query}'"
         result = f"🔍 Результаты поиска по {search_term}:\n\n"
 
-    # Форматируем каждую заметку
     for note_date, note_text in found_notes:
         date_obj = datetime.datetime.strptime(note_date, "%Y-%m-%d")
         formatted_date = format_date_russian(date_obj)
         result += f"📅 {formatted_date}:\n{note_text}\n\n"
 
-    # Добавляем информацию о количестве найденных заметок
-    total_notes = len(found_notes)
-    result += f"\nВсего заметок: {total_notes}"
+    result += f"\nВсего заметок: {len(found_notes)}"
 
     return result.strip()
 
@@ -1080,7 +1045,6 @@ async def handle_search_input(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if search_type == "search_date":
         try:
-            # Преобразуем введенную дату в формат хранения
             date_obj = datetime.datetime.strptime(search_input, "%d.%m.%Y")
             search_date = date_obj.strftime("%Y-%m-%d")
             result = search_notes(user_id, date_str=search_date)
@@ -1111,7 +1075,6 @@ def find_next_lesson(user_id: int, subject_query: str) -> str:
     group = user_groups[user_id]
     today = datetime.datetime.now()
 
-    # Ищем похожие предметы
     subject_query = subject_query.lower()
     matching_subjects = set()
     for item in schedule_data:
@@ -1121,11 +1084,9 @@ def find_next_lesson(user_id: int, subject_query: str) -> str:
     if not matching_subjects:
         return f"❌ Предмет, похожий на '{subject_query}', не найден в вашем расписании."
 
-    # Для каждого похожего предмета ищем ближайшую пару
     next_lessons = []
     for subject in matching_subjects:
-        # Проверяем на неделю вперед
-        for i in range(8):  # сегодня + 7 дней
+        for i in range(8):
             check_date = today + datetime.timedelta(days=i)
             week_num = get_current_week(check_date)
             weekday = check_date.strftime("%A")
@@ -1136,7 +1097,6 @@ def find_next_lesson(user_id: int, subject_query: str) -> str:
             }
             day_rus = russian_days.get(weekday)
 
-            # Ищем пары этого предмета в этот день
             for item in schedule_data:
                 if (item['group'] == group and
                         item['subject'] == subject and
@@ -1155,11 +1115,9 @@ def find_next_lesson(user_id: int, subject_query: str) -> str:
     if not next_lessons:
         return f"❌ Не нашел предстоящих занятий по предмету '{subject_query}' в ближайшую неделю."
 
-    # Сортируем по дате и времени
     next_lessons.sort(key=lambda x: (x['days_until'], x['time']))
     next_lesson = next_lessons[0]
 
-    # Формируем ответ
     if next_lesson['days_until'] == 0:
         day_str = "сегодня"
     elif next_lesson['days_until'] == 1:
@@ -1182,11 +1140,10 @@ def count_remaining_lessons(user_id: int) -> str:
     today = datetime.datetime.now()
     current_week_num = get_current_week(today)
 
-    # Считаем оставшиеся пары на этой неделе
     remaining_lessons = []
-    for i in range(8):  # проверяем текущую неделю
+    for i in range(8):
         check_date = today + datetime.timedelta(days=i)
-        if check_date.isocalendar()[1] != today.isocalendar()[1]:  # если перешли на следующую неделю
+        if check_date.isocalendar()[1] != today.isocalendar()[1]:
             break
 
         weekday = check_date.strftime("%A")
@@ -1197,7 +1154,6 @@ def count_remaining_lessons(user_id: int) -> str:
         }
         day_rus = russian_days.get(weekday)
 
-        # Если это сегодня, учитываем текущее время
         current_time = None
         if i == 0:
             current_time = today.strftime("%H:%M")
@@ -1207,7 +1163,6 @@ def count_remaining_lessons(user_id: int) -> str:
                     item['day'] == day_rus and
                     (item['week_num'] is None or item['week_num'] == current_week_num)):
 
-                # Если это сегодня, проверяем, не прошла ли уже пара
                 if current_time:
                     lesson_end_time = item['time'].split('-')[1]
                     if current_time > lesson_end_time:
@@ -1223,10 +1178,8 @@ def count_remaining_lessons(user_id: int) -> str:
     if not remaining_lessons:
         return "🎉 На этой неделе больше нет пар!"
 
-    # Сортируем по дате и времени
     remaining_lessons.sort(key=lambda x: (x['date'], x['time']))
 
-    # Формируем ответ
     total = len(remaining_lessons)
     response = f"📚 Осталось {total} пар на этой неделе:\n\n"
 
@@ -1250,7 +1203,6 @@ async def handle_ai_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     text = update.message.text.lower()
 
-    # Проверяем, выбрана ли группа
     if user_id not in user_groups:
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Выбрать группу", callback_data="view_schedule"),
@@ -1264,7 +1216,6 @@ async def handle_ai_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['last_assistant_message'] = message.message_id
         return
 
-    # Удаляем предыдущее сообщение помощника, если оно есть
     if 'last_assistant_message' in context.user_data:
         try:
             await context.bot.delete_message(
@@ -1272,15 +1223,13 @@ async def handle_ai_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 message_id=context.user_data['last_assistant_message']
             )
         except Exception:
-            pass  # Игнорируем ошибки при удалении сообщения
+            pass
 
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton("◀ Назад", callback_data="go_back_to_main")
     ]])
 
-    # Проверяем различные типы запросов
     if "когда" in text and "следующ" in text:
-        # Ищем название предмета в запросе
         subject_words = text.split()
         for word in ["когда", "следующ", "следующая", "следующий", "будет"]:
             if word in subject_words:
@@ -1298,7 +1247,6 @@ async def handle_ai_request(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['last_assistant_message'] = message.message_id
         return
 
-    # Если запрос не распознан
     message = await update.message.reply_text(
         "🤔 Я пока не умею отвечать на такой вопрос. Попробуйте спросить:\n"
         "• Когда следующая [предмет]?\n"
@@ -1312,7 +1260,6 @@ def create_initial_group_keyboard():
     if not available_groups:
         return None
 
-    # Получаем уникальные направления
     directions = sorted(set(group[:3] for group in available_groups))
 
     keyboard = []
@@ -1353,34 +1300,28 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
     try:
-        # Пробуем разобрать введенное время
         if ':' in text:
             hours, minutes = map(int, text.split(':'))
         else:
             hours = int(text)
             minutes = 0
 
-        # Проверяем корректность времени
         if not (0 <= hours <= 23 and 0 <= minutes <= 59):
             raise ValueError
 
-        # Сохраняем время пользователя
-        user_notification_times[user_id] = hours
+        user_notification_times[user_id] = {"hour": hours, "minute": minutes}
 
-        # Обновляем расписание в планировщике для этого пользователя
         scheduler = context.job_queue
         user_jobs = scheduler.get_jobs_by_name(f"daily_notification_{user_id}")
         for job in user_jobs:
             job.schedule_removal()
 
-        # Создаем новое расписание для пользователя
         scheduler.run_daily(
             send_daily_schedule,
             time=datetime.time(hour=hours, minute=minutes),
             name=f"daily_notification_{user_id}"
         )
 
-        # Отправляем подтверждение и возвращаем в главное меню
         await update.message.reply_text(
             f"✅ Время рассылки установлено на {hours:02d}:{minutes:02d}",
             reply_markup=create_main_menu_keyboard(user_id)
@@ -1399,7 +1340,7 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return WAITING_FOR_TIME
 
 
-def get_user_notification_time(user_id: int) -> int:
+def get_user_notification_time(user_id: int) -> dict:
     return user_notification_times.get(user_id, DEFAULT_NOTIFICATION_TIME)
 
 
@@ -1407,10 +1348,8 @@ def main():
     load_schedule()
     application = ApplicationBuilder().token(TOKEN).build()
 
-    # Настройка планировщика для ежедневной рассылки
     scheduler = BackgroundScheduler(timezone=pytz.timezone('Europe/Moscow'))
 
-    # Создаем отдельные задачи для каждого пользователя
     for user_id in subscribed_users:
         notification_time = get_user_notification_time(user_id)
         scheduler.add_job(
@@ -1418,12 +1357,11 @@ def main():
                 lambda ctx: send_daily_schedule(ctx, user_ids=[uid]), 0
             ),
             'cron',
-            hour=notification_time,
-            minute=0
+            hour=notification_time['hour'],
+            minute=notification_time['minute']
         )
     scheduler.start()
 
-    # Создаем ConversationHandler для установки времени
     time_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(set_notification_time, pattern="^set_time$")],
         states={
@@ -1436,7 +1374,6 @@ def main():
         per_message=False
     )
 
-    # Создаем ConversationHandler для поиска
     search_handler = ConversationHandler(
         entry_points=[CommandHandler('search', start_search)],
         states={
@@ -1449,7 +1386,6 @@ def main():
         per_message=False
     )
 
-    # Создаем ConversationHandler для загрузки файла
     file_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(request_schedule_file, pattern="^upload_schedule$")],
         states={
@@ -1462,17 +1398,14 @@ def main():
         per_message=False
     )
 
-    # Обработчики команд и сообщений
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("test", test_notification))
     application.add_handler(search_handler)
     application.add_handler(file_handler)
     application.add_handler(time_handler)
 
-    # Добавляем общий обработчик callback_query до обработчика текстовых сообщений
     application.add_handler(CallbackQueryHandler(button_callback))
 
-    # Обработчик текстовых сообщений должен быть последним
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
 
     print("Бот запущен...")
